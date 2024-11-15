@@ -3,9 +3,13 @@ const ping = require('ping');  // ICMP ping 패키지
 const net = require('net');    // TCP 연결을 확인할 수 있는 Node.js 내장 모듈
 const iconv = require('iconv-lite');  // iconv-lite 라이브러리 추가
 const axios = require('axios');  // axios
+const https = require('https');
 
 const app = express();
 const port = 3000;
+
+const traceroute = require('traceroute');
+// const fast = require('fast-cli');
 
 const { exec } = require('child_process');
 
@@ -43,7 +47,7 @@ app.get('/ping', async (req, res) => {
                     ipStatus: true,
                 });
             } else {
-                res.json({ message: `Ping to ${ip} was successful.`, ipStatus: true, time: pingResult.tiem });
+                res.json({ message: `Ping to ${ip} was successful.`, ipStatus: true, time: pingResult.time });
             }
         } else {
             res.json({ message: `Ping to ${ip} failed.`, ipStatus: false });
@@ -119,6 +123,64 @@ app.post('/check-connectivity', async (req, res) => {
             }
         }
     } catch (error) {
+        res.json({ method: 'ping', reachable: false, status: 'Ping failed and HTTP request failed' });
+    }
+});
+
+app.get('/speedtest', async (req, res) => {
+    const FastSpeedtest = require("fast-speedtest-api");
+
+    let speedtest = new FastSpeedtest({
+        token: await getToken(), // required
+        verbose: false, // default: false
+        timeout: 10000, // default: 5000
+        https: true, // default: true
+        urlCount: 5, // default: 5
+        bufferSize: 8, // default: 8
+        unit: FastSpeedtest.UNITS.Mbps, // default: Bps
+        proxy: 'http://optional:auth@my-proxy:123' // default: undefined
+    });
+
+    speedtest.getSpeed().then(s => {
+        res.json({ downloadSpeed: s });
+    }).catch(e => {
+        console.error(e.message);
+    });
+});
+
+const puppeteer = require('puppeteer');
+
+async function getToken() {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto('https://fast.com');
+
+    // 페이지의 네트워크 요청을 확인하여 토큰을 추출합니다
+    const response = await page.waitForResponse(response =>
+        response.url().includes('/netflix/speedtest') &&
+        response.status() === 200
+    );
+    const url = response.url();
+    const token = new URL(url).searchParams.get('token');
+
+    await browser.close();
+    return token;
+}
+
+
+
+app.get('/traceroute', (req, res) => {
+    try {
+        const host = req.query.ip;
+
+        traceroute.trace('8.8.8.8', (err, hops) => {
+            if (err) {
+                res.status(500).json({ error: 'Traceroute failed', message: err.message });
+            } else {
+                res.json({ hops: hops });
+            }
+        });
+    } catch (e) {
         res.json({ method: 'ping', reachable: false, status: 'Ping failed and HTTP request failed' });
     }
 });

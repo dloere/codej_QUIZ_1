@@ -31,7 +31,7 @@
         <!-- 검색 이력 -->
         <div v-if="history.length">
           <ul>
-            <li v-for="(item, index) in history" :key="index" >
+            <li v-for="(item, index) in history" :key="index" @click="repeatPing(item)">
               <span :style="{ color: item.ipStatus ? 'green' : 'red' }">{{ item.ip }}</span>
               <span v-if="item.port" :style="{ color: item.portStatus ? 'green' : 'red' }">:{{ item.port }}</span>
               <button @click="deleteHistory(index)">X</button> <!-- X 버튼 추가 -->

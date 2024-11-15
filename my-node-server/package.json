@@ -13,6 +13,12 @@
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "express": "^4.21.1",
-    "ping": "^0.4.4"
+    "fast-cli": "^4.0.0",
+    "fast-speedtest-api": "^0.3.2",
+    "ping": "^0.4.4",
+    "puppeteer": "^23.8.0",
+    "speedtest-cli": "^0.1.0",
+    "speedtest-net": "^2.2.0",
+    "traceroute": "^1.0.0"
   }
 }
