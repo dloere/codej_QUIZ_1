@@ -1,13 +1,24 @@
 const express = require('express');
 const ping = require('ping');  // ICMP ping 패키지
 const net = require('net');    // TCP 연결을 확인할 수 있는 Node.js 내장 모듈
+const iconv = require('iconv-lite');  // iconv-lite 라이브러리 추가
+const axios = require('axios');  // axios
 
 const app = express();
 const port = 3000;
 
+const { exec } = require('child_process');
+
 // CORS 설정 (프론트엔드에서 요청을 허용)
 const cors = require('cors');
 app.use(cors());
+
+// JSON 형태의 데이터 파싱
+app.use(express.json());
+
+// URL 인코딩된 데이터 파싱 (폼 데이터)
+app.use(express.urlencoded({ extended: true }));
+
 
 // Ping 요청 처리
 app.get('/ping', async (req, res) => {
@@ -27,17 +38,18 @@ app.get('/ping', async (req, res) => {
             if (port) {
                 const isPortOpen = await checkPort(ip, port);
                 res.json({
-                    message: `Ping to ${ip} was successful.`,
-                    portStatus: isPortOpen ? `Port ${port} is open.` : `Port ${port} is closed.`
+                    message: `Ping to ${ip} was successful.` + (isPortOpen ? `Port ${port} is open.` : `Port ${port} is closed.`),
+                    portStatus: isPortOpen,
+                    ipStatus: true,
                 });
             } else {
-                res.json({ message: `Ping to ${ip} was successful.` });
+                res.json({ message: `Ping to ${ip} was successful.`, ipStatus: true, time: pingResult.tiem });
             }
         } else {
-            res.json({ message: `Ping to ${ip} failed.` });
+            res.json({ message: `Ping to ${ip} failed.`, ipStatus: false });
         }
     } catch (error) {
-        res.status(500).json({ message: 'Error pinging the IP address.' });
+        res.status(500).json({ message: 'Error pinging the IP address.', ipStatus: false });
     }
 });
 
@@ -65,6 +77,51 @@ const checkPort = (ip, port) => {
         socket.connect(port, ip);  // 주어진 IP와 포트로 연결 시도
     });
 };
+
+
+app.get('/get-router-ip', (req, res) => {
+    exec('chcp 65001 & ipconfig', { encoding: 'binary' }, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`exec error: ${error}`);
+            return;
+        }
+
+        const decodedStdout = iconv.decode(Buffer.from(stdout, 'binary'), 'utf-8');
+        console.log(decodedStdout);  // 제대로 출력되는지 확인
+
+        // 정규 표현식 실행 (필요한 정보를 추출)
+        const match = decodedStdout.match(/Default Gateway[ .:]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/);
+        if (match && match[1]) {
+            routerIP = match[1];
+            return res.json({ routerIP });
+        } else {
+            return res.status(404).json({ error: 'Router IP not found' });
+        }
+    });
+})
+
+app.post('/check-connectivity', async (req, res) => {
+    const { address } = req.body;  // 사용자로부터 IP나 도메인 주소를 받음
+
+    try {
+        // 1. Ping 테스트 시도
+        const pingResult = await ping.promise.probe(address);
+
+        if (pingResult.alive) {
+            return res.json({ method: 'ping', reachable: true, status: 'Ping successful' });
+        } else {
+            // 2. Ping 실패 시 Axios로 HTTP 요청 시도
+            try {
+                const response = await axios.get(`http://${address}`);
+                return res.json({ method: 'axios', reachable: true, status: response.status });
+            } catch (httpError) {
+                return res.json({ method: 'axios', reachable: false, status: httpError.message });
+            }
+        }
+    } catch (error) {
+        res.json({ method: 'ping', reachable: false, status: 'Ping failed and HTTP request failed' });
+    }
+});
 
 // 서버 실행
 app.listen(port, () => {
